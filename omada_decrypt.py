@@ -147,6 +147,11 @@ def rc4(key, data):
 FIELD_PREFIX = "v2#"
 PBKDF2_PREFIX = b"v0hGiXNmbzJdhMvx8BRMrg=="
 
+# Key appended to the decrypted JSON listing the paths of every field that was
+# "v2#"-encrypted, so omada_encrypt.py can re-encrypt exactly those fields. Each
+# path is a list of dict-key (str) / list-index (int) segments from the root.
+METADATA_KEY = "__omada_encrypted_fields__"
+
 # --- minimal AES-128 (decrypt only) so the script stays dependency-free ---
 _SBOX = bytes.fromhex(
     "637c777bf26b6fc53001672bfed7ab76ca82c97dfa5947f0add4a2af9ca472c0"
@@ -254,33 +259,35 @@ def derive_field_key_iv(key_salt_iv):
     return key, iv
 
 
-def decrypt_fields(obj, key, iv):
+def decrypt_fields(obj, key, iv, path=()):
     """Recursively replace any 'v2#...' string with its decrypted value.
 
-    Returns (new_obj, count_decrypted)."""
-    count = 0
+    Returns (new_obj, paths) where paths is a list of segment-lists locating
+    each field that was decrypted, so the operation can later be reversed."""
     if isinstance(obj, dict):
         new = {}
+        paths = []
         for k, v in obj.items():
-            nv, c = decrypt_fields(v, key, iv)
+            nv, p = decrypt_fields(v, key, iv, path + (k,))
             new[k] = nv
-            count += c
-        return new, count
+            paths += p
+        return new, paths
     if isinstance(obj, list):
         new = []
-        for v in obj:
-            nv, c = decrypt_fields(v, key, iv)
+        paths = []
+        for i, v in enumerate(obj):
+            nv, p = decrypt_fields(v, key, iv, path + (i,))
             new.append(nv)
-            count += c
-        return new, count
+            paths += p
+        return new, paths
     if isinstance(obj, str) and obj.startswith(FIELD_PREFIX):
         try:
             data = base64.b64decode(obj[len(FIELD_PREFIX):])
             plain = aes_cbc_decrypt(key, iv, data).decode("utf-8")
-            return plain, 1
+            return plain, [list(path)]
         except Exception:
-            return obj, 0
-    return obj, count
+            return obj, []
+    return obj, []
 
 
 def decrypt(path):
@@ -327,8 +334,10 @@ def main(argv):
         ksi = doc.get("systemSetting", {}).get("pbkdf2KeySaltIv")
         if ksi and len(ksi) >= 96:
             key, iv = derive_field_key_iv(ksi)
-            doc, n = decrypt_fields(doc, key, iv)
-            print("Decrypted %d 'v2#' inner field value(s)." % n)
+            doc, paths = decrypt_fields(doc, key, iv)
+            if paths:
+                doc[METADATA_KEY] = paths   # let omada_encrypt.py reverse this
+            print("Decrypted %d 'v2#' inner field value(s)." % len(paths))
         else:
             print("No pbkdf2KeySaltIv found; inner fields left as-is.")
         with open(out, "w", encoding="utf-8") as f:
