@@ -1,7 +1,7 @@
 # Omada Backup Decryptor
 
-Decrypt TP-Link Omada Controller `.cfg` backup files into readable JSON — no
-controller required.
+Decrypt TP-Link Omada Controller `.cfg` backup files into readable JSON — and
+re-encrypt them back into a valid `.cfg` — no controller required.
 
 ## Why this exists
 
@@ -19,13 +19,17 @@ years old — without touching your running controller.
 
 - Decrypts Omada `.cfg` backups to formatted JSON.
 - Also decrypts the individual `v2#`-encrypted fields inside the JSON.
-- **Read-only** — never connects to or modifies a controller or the `.cfg`.
+- **Re-encrypts** edited JSON back into a valid `.cfg` (`omada_encrypt.py`).
+- **Lossless round-trip** — decrypt records which fields it decrypted, so
+  encrypt restores them automatically with no flags or guesswork.
 - **No dependencies** — pure Python 3 standard library (RC4, TEA, AES-128-CBC
   and PBKDF2 are all included or come from the stdlib).
-- Works offline; the decryption keys are embedded in the file format itself,
-  not tied to your controller.
+- Works offline; the keys are embedded in the file format itself, not tied to
+  your controller.
 
 ## Usage
+
+### Decrypt
 
 ```sh
 python omada_decrypt.py backup.cfg
@@ -35,6 +39,36 @@ python omada_decrypt.py backup.cfg out.json          # explicit output path
 python omada_decrypt.py backup.cfg --keep-encrypted  # leave "v2#" fields as-is
 python omada_decrypt.py backup.cfg --raw stream.gz   # stop after RC4 (raw gzip)
 ```
+
+### Encrypt (edit and rebuild a `.cfg`)
+
+```sh
+python omada_encrypt.py backup.json
+# -> writes backup.cfg (re-encrypts "v2#" fields, then GZIP + RC4)
+
+python omada_encrypt.py backup.json out.cfg          # explicit output path
+python omada_encrypt.py --selftest backup.cfg        # round-trip validation
+```
+
+The default decrypt appends a small `__omada_encrypted_fields__` marker to the
+JSON listing the paths of every field it decrypted. `omada_encrypt.py` reads
+that marker, re-encrypts exactly those fields, and strips the marker again — so
+the normal workflow needs no flags:
+
+```sh
+python omada_decrypt.py backup.cfg backup.json   # decrypt
+#   ...edit backup.json...
+python omada_encrypt.py backup.json new.cfg      # re-encrypt, fields restored
+```
+
+If you decrypted with `--keep-encrypted`, there's no marker and the `v2#` values
+are already present, so encrypt simply passes them through.
+
+**Byte-identical round-trip.** Re-encrypting an *unmodified* decrypt reproduces
+the original `.cfg` exactly — same length, same SHA-256 (verified on multiple
+v6.2.10.17 backups). See [Byte-identical output](#byte-identical-output) for why
+this works. Restoring a rebuilt `.cfg` into a live controller has not been
+tested, so use at your own risk.
 
 Requires Python 3.6+.
 
@@ -73,6 +107,35 @@ TEA-decrypted** (Tiny Encryption Algorithm, 64 rounds, key `a` from `m.class`);
 the remaining 216 bytes are used unchanged. The script reproduces this exactly,
 so it works without the controller. Because the key is static and embedded in
 the software, every controller of this version uses the same key.
+
+Encryption (`omada_encrypt.py`) is the exact inverse: GZIP the JSON, then RC4
+with the same key (RC4 is symmetric). The inner `v2#` fields are re-encrypted
+with the forward AES-128/CBC path; because the IV is *derived* (not random),
+re-encrypting a value reproduces its original ciphertext byte-for-byte.
+
+### Byte-identical output
+
+Re-encrypting an unmodified decrypt reproduces the original `.cfg` **exactly**.
+Three details make this work:
+
+1. **JSON serialization.** The controller emits compact JSON (no spaces after
+   `:` or `,`), raw UTF-8 (non-ASCII *not* `\u`-escaped), and preserves object
+   key order. Python's
+   `json.dumps(doc, ensure_ascii=False, separators=(",", ":"))` matches it
+   byte-for-byte.
+2. **DEFLATE.** Java's `Deflater` is a JNI wrapper around the same zlib that
+   Python's `zlib` uses, so at the default level **6** the compressed stream is
+   identical bit-for-bit.
+3. **GZIP framing.** Java's `GZIPOutputStream` writes `MTIME = 0` and the OS
+   byte as `0xFF` ("unknown"). Python's `gzip` module writes a different OS
+   byte, so `omada_encrypt.py` frames the gzip header/trailer by hand to match.
+
+The inner `v2#` fields reproduce exactly because their AES IV is derived, not
+random (see above). Net result: `encrypt(decrypt(x)) == x` at the byte level.
+
+> The only assumption is that the controller compressed at zlib's default
+> level 6 — which is what `GZIPOutputStream` uses unless told otherwise, and
+> what every tested backup matches.
 
 ### Inner layer — individual `v2#` fields
 
