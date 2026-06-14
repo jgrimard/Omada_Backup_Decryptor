@@ -5,8 +5,8 @@ controller required.
 
 ## Why this exists
 
-I needed to look up a few settings from an **old** Omada backup, but the `.cfg`
-file is encrypted, and the only official way to read it is to *restore* it.
+I needed to look up a few settings from an old Omada backup, but the `.cfg`
+file is encrypted, and the only official way to read it is to restore it.
 Restoring would have rolled my live controller back to that older state, which
 I didn't want. I just wanted to read the configuration out of the file.
 
