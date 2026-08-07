@@ -84,12 +84,39 @@ radiusServerSetting, firmwareUpgradeConfig, globalNotification, ...
 — site settings, WLAN/SSID config, wired networks, device lists, profiles,
 schedules, and so on.
 
+## Verified versions
+
+The key is unchanged across every controller checked so far -- including a full
+major version below the one this was reverse-engineered from, and on hardware
+controllers as well as software ones.
+
+| Controller | Type | Verified by |
+|---|---|---|
+| 5.15.24.21 | OC200 v1 (hardware) | independent, 2026-08-07 |
+| 6.1.0.19 | OC200 v1 (hardware) | independent, 2026-08-07 |
+| 6.2.10.17 | software | this repo |
+
+Both hardware checks decrypted to gzip with a valid CRC32/ISIZE trailer and
+parsed as JSON (242,357 -> 1,329,200 bytes, and 496,475 -> 2,657,176 bytes).
+
+### Checking a candidate key without a controller
+
+Every backup begins with the same ten ciphertext bytes, `a5 5e 94 e7 5e e5 c8
+e7 b5 36`, because Java's gzip header is constant and the keystream is static.
+XOR-ing the two yields keystream `ba d5 9c e7 5e e5 c8 e7 b5 c9`, so any
+candidate key can be checked in microseconds without decrypting anything.
+
+That last byte also confirms this README's note about gzip framing: Java really
+does write the OS byte as `0xFF`. Measured directly on OpenJDK 21, which emits
+`1f 8b 08 00 00 00 00 00 00 ff`.
+
 ## How it works
 
 Reverse-engineered from Omada Controller **v6.2.10.17** (classes
 `com.tplink.smb.omada.common.util.b.{j,m,a,i}`, decompiled from
 `backup-core-*.jar` / `omada-common-*.jar`). Tested against a v6.2.10.17
-controller backup; other 6.x versions are likely compatible but unverified.
+controller backup, and independently against 5.15.24.21 and 6.1.0.19 -- see
+[Verified versions](#verified-versions).
 
 ### Outer layer — the whole file
 
@@ -102,11 +129,12 @@ controller backup; other 6.x versions are likely compatible but unverified.
 3. UTF-8 **JSON**.
 
 The RC4 key is **not** a user password — it is hard-coded in the controller. It
-is a 224-byte array (`c` in `j.class`) whose **first 8-byte block is
+is a 256-byte array (`c` in `j.class`) whose **first 8-byte block is
 TEA-decrypted** (Tiny Encryption Algorithm, 64 rounds, key `a` from `m.class`);
-the remaining 216 bytes are used unchanged. The script reproduces this exactly,
+the remaining 248 bytes are used unchanged. The script reproduces this exactly,
 so it works without the controller. Because the key is static and embedded in
-the software, every controller of this version uses the same key.
+the software, every controller using it shares the same key -- see
+[Verified versions](#verified-versions).
 
 Encryption (`omada_encrypt.py`) is the exact inverse: GZIP the JSON, then RC4
 with the same key (RC4 is symmetric). The inner `v2#` fields are re-encrypted
