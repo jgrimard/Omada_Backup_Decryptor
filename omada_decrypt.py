@@ -8,9 +8,9 @@ Reverse-engineered from TP-Link Omada Controller v6.2.10.17
 Backup file format (outer layer):
     RC4( GZIP( JSON ) )
 
-The RC4 key is a fixed 224-byte array `c` whose FIRST 8-byte block has been
+The RC4 key is a fixed 256-byte array `c` whose FIRST 8-byte block has been
 TEA-decrypted (Tiny Encryption Algorithm, 64 rounds, key `a`); the remaining
-216 bytes are left unchanged. BouncyCastle's RC4Engine is used with that key.
+248 bytes are left unchanged. BouncyCastle's RC4Engine is used with that key.
 
 After RC4 + GZIP you get a UTF-8 JSON document containing the controller /
 site configuration (the "SDN backup file").
@@ -34,7 +34,7 @@ MASK = 0xFFFFFFFF
 TEA_KEY = [-707509657, -1887749506, 1427902494, -1686606610]
 DELTA = -1640531527  # 0x9E3779B9 as a signed 32-bit int
 
-# j.c : the obfuscated RC4 key array (signed bytes, length 224)
+# j.c : the obfuscated RC4 key array (signed bytes, length 256)
 C = [112, 122, 14, 91, -110, 101, -10, 34, 51, 59, 94, 118, 50, 108, 63, 50,
      94, 52, 94, 104, 67, 100, 117, 114, 110, 53, 47, 79, 38, 103, 43, 59,
      70, 43, 72, 119, 107, 61, 108, 82, 84, 80, 36, 95, 106, 72, 53, 101,

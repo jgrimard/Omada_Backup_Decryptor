@@ -86,7 +86,7 @@ schedules, and so on.
 
 ## Verified versions
 
-The key is unchanged across every controller checked so far -- including a full
+The key is unchanged across every controller checked so far — including a full
 major version below the one this was reverse-engineered from, and on hardware
 controllers as well as software ones.
 
@@ -115,7 +115,7 @@ does write the OS byte as `0xFF`. Measured directly on OpenJDK 21, which emits
 Reverse-engineered from Omada Controller **v6.2.10.17** (classes
 `com.tplink.smb.omada.common.util.b.{j,m,a,i}`, decompiled from
 `backup-core-*.jar` / `omada-common-*.jar`). Tested against a v6.2.10.17
-controller backup, and independently against 5.15.24.21 and 6.1.0.19 -- see
+controller backup, and independently against 5.15.24.21 and 6.1.0.19 — see
 [Verified versions](#verified-versions).
 
 ### Outer layer — the whole file
@@ -133,7 +133,7 @@ is a 256-byte array (`c` in `j.class`) whose **first 8-byte block is
 TEA-decrypted** (Tiny Encryption Algorithm, 64 rounds, key `a` from `m.class`);
 the remaining 248 bytes are used unchanged. The script reproduces this exactly,
 so it works without the controller. Because the key is static and embedded in
-the software, every controller using it shares the same key -- see
+the software, every controller using it shares the same key — see
 [Verified versions](#verified-versions).
 
 Encryption (`omada_encrypt.py`) is the exact inverse: GZIP the JSON, then RC4
